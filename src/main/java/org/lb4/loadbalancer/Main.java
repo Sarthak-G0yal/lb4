@@ -4,6 +4,7 @@ import java.nio.file.Path;
 
 import org.lb4.loadbalancer.config.AppConfig;
 import org.lb4.loadbalancer.config.ConfigLoader;
+import org.lb4.loadbalancer.core.LoadBalancerServer;
 
 public class Main {
 
@@ -14,5 +15,8 @@ public class Main {
         }
         AppConfig config = ConfigLoader.loadFromPath(Path.of(args[0]));
         System.out.println("Loaded Config: " + config);
+
+        LoadBalancerServer server = new LoadBalancerServer(config);
+        server.start();
     }
 }

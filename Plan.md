@@ -46,7 +46,7 @@
 
 ---
 
-# Phase 2 — Single Selector Event Loop
+# ~~Phase 2 — Single Selector Event Loop~~
 
 ## Goals
 
