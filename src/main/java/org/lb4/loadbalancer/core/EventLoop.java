@@ -14,13 +14,15 @@ import org.lb4.loadbalancer.config.ServerConfig;
 public class EventLoop {
 
     private final ServerConfig serverConfig;
+    private final SessionManager sessionManager;
     private final ByteBuffer readBuffer = ByteBuffer.allocate(8192);
 
     private Selector selector;
     private ServerSocketChannel serverChannel;
 
-    public EventLoop(ServerConfig serverConfig) {
+    public EventLoop(ServerConfig serverConfig, SessionManager sessionManager) {
         this.serverConfig = serverConfig;
+        this.sessionManager = sessionManager;
     }
 
     public void run() {
@@ -59,25 +61,51 @@ public class EventLoop {
         SocketChannel client;
         while ((client = server.accept()) != null) {
             client.configureBlocking(false);
-            client.register(selector, SelectionKey.OP_READ);
-            System.out.println("Accepted " + client.getRemoteAddress());
+
+            Session session = sessionManager.createSession();
+            session.setClientChannel(client);
+
+            SelectionKey clientKey = client.register(selector, SelectionKey.OP_READ, session);
+            session.setClientKey(clientKey);
+            session.setState(SessionState.ACTIVE);
+
+            sessionManager.register(session);
+            System.out.println("Accepted session " + session.getSessionId() + " from " + client.getRemoteAddress());
         }
     }
 
     private void handleRead(SelectionKey key) throws IOException {
+        Session session = (Session) key.attachment();
+        if (session == null) {
+            key.cancel();
+            return;
+        }
         SocketChannel client = (SocketChannel) key.channel();
         readBuffer.clear();
         int read = client.read(readBuffer);
 
         if (read == -1) {
-            System.out.println("Closed by peer" + client.getRemoteAddress());
-            key.cancel();
-            client.close();
+            System.out.println("Closed by peer session " + session.getSessionId() + " " + client.getRemoteAddress());
+            closeSession(session);
             return;
         }
         if (read > 0) {
             System.out.println("Read " + read + "byte from " + client.getRemoteAddress());
         }
+    }
+
+    private void closeSession(Session session) throws IOException {
+        session.setState(SessionState.CLOSED);
+
+        SelectionKey clientKey = session.getClientKey();
+        if (clientKey != null) {
+            clientKey.cancel();
+        }
+        SocketChannel client = session.getClientChannel();
+        if (client != null && client.isOpen()) {
+            client.close();
+        }
+        sessionManager.remove(session);
     }
 
 }

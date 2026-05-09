@@ -88,7 +88,7 @@
 
 ---
 
-# Phase 3 — Session Architecture
+# ~~Phase 3 — Session Architecture~~
 
 ## Goals
 
