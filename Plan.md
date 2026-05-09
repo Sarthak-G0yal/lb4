@@ -1,4 +1,4 @@
-# Phase 1 — Project Foundation
+# ~~Phase 1 — Project Foundation~~
 
 ## Goals
 

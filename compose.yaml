@@ -1,0 +1,18 @@
+services:
+  backend1:
+    build: .
+    command: ["9001", "backend-1"]
+    ports:
+      - "9001:9001"
+
+  backend2:
+    build: .
+    command: ["9002", "backend-2"]
+    ports:
+      - "9002:9002"
+
+  backend3:
+    build: .
+    command: ["9003", "backend-3"]
+    ports:
+      - "9003:9003"
