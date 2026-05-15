@@ -11,10 +11,15 @@ public class Session {
     private SelectionKey clientKey;
     private SelectionKey backendKey;
     private SessionState state;
+    private Backend backend;
 
     public Session(long sessionId) {
         this.sessionId = sessionId;
         this.state = SessionState.NEW;
+    }
+
+    public long getSessionId() {
+        return sessionId;
     }
 
     public SocketChannel getClientChannel() {
@@ -57,8 +62,11 @@ public class Session {
         this.state = state;
     }
 
-    public long getSessionId() {
-        return sessionId;
+    public Backend getBackend() {
+        return backend;
     }
 
+    public void setBackend(Backend backend) {
+        this.backend = backend;
+    }
 }

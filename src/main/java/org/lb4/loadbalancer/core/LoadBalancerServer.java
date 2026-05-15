@@ -10,7 +10,8 @@ public class LoadBalancerServer {
     public LoadBalancerServer(AppConfig config) {
         this.config = config;
         SessionManager sessionManager = new SessionManager();
-        this.eventLoop = new EventLoop(config.getServer(),sessionManager);
+        BackendRegistry backendRegistry = new BackendRegistry(config.getBackends());
+        this.eventLoop = new EventLoop(config.getServer(), sessionManager, backendRegistry);
     }
 
     public void start() {
