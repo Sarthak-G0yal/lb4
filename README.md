@@ -1,6 +1,6 @@
 # Java Layer 4 Load Balancer (Learning Project)
 
-This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-4 cover project setup, YAML configuration, config validation, the initial selector-based event loop, session tracking, and backend connection pairing.
+This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-5 cover project setup, YAML configuration, config validation, the initial selector-based event loop, session tracking, backend connection pairing, and bidirectional byte forwarding.
 
 ## Phase 1 Status
 
@@ -28,6 +28,12 @@ This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-4 co
 - Backend registry and selection
 - Non-blocking backend connections (OP_CONNECT)
 - Client-backend pairing per session
+
+## Phase 5 Status
+
+- Bidirectional byte forwarding
+- Single reusable direct buffer
+- EOF handling and brutal teardown on errors
 
 ## Requirements
 
@@ -71,7 +77,7 @@ java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServ
 java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServer 9003 backend-3
 ```
 
-## Run Load Balancer (Phase 2-4)
+## Run Load Balancer (Phase 2-5)
 
 ```bash
 mvn -q -DskipTests exec:java \
@@ -79,6 +85,18 @@ mvn -q -DskipTests exec:java \
   -Dexec.args="src/main/resources/config.yaml"
 ```
 
+## End-to-End Validation (Phase 5)
+
+1. Start the backends (Docker or local terminals).
+2. Start the load balancer.
+3. Send traffic through the load balancer and verify the echo response.
+
+```bash
+printf "hello phase5\n" | nc 127.0.0.1 8080
+```
+
+You should see the same text echoed back. The load balancer logs should show accept, connect, read, and forward events.
+
 ## Next Phase
 
-Phase 5 implements bidirectional byte forwarding.
+Phase 6 adds IP-hash backend selection.

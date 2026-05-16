@@ -13,10 +13,12 @@ import org.lb4.loadbalancer.config.ServerConfig;
 
 public class EventLoop {
 
+    private static final int BUFFER_SIZE = 8192;
+
     private final ServerConfig serverConfig;
     private final SessionManager sessionManager;
     private final BackendRegistry backendRegistry;
-    private final ByteBuffer readBuffer = ByteBuffer.allocate(8192);
+    private final ByteBuffer readBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
 
     private Selector selector;
     private ServerSocketChannel serverChannel;
@@ -131,19 +133,47 @@ public class EventLoop {
             key.channel().close();
             return;
         }
-        SocketChannel channel = (SocketChannel) key.channel();
+        SocketChannel from = (SocketChannel) key.channel();
+        SocketChannel to = peerChannel(session, from);
+        if (to == null || !to.isConnected()) {
+            closeSession(session);
+            return;
+        }
+
         readBuffer.clear();
-        int read = channel.read(readBuffer);
+        int read = from.read(readBuffer);
 
         if (read == -1) {
             System.out.println("Closed by peer session " + session.getSessionId());
             closeSession(session);
             return;
         }
-        if (read > 0) {
-            String side = channel == session.getClientChannel() ? "client" : "backend";
-            System.out.println("Read " + read + "byte from " + side + " for session " + session.getSessionId());
+        if (read == 0) {
+            return;
         }
+        readBuffer.flip();
+        int totalWritten = 0;
+        while (readBuffer.hasRemaining()) {
+            int written = to.write(readBuffer);
+            if (written == 0) {
+                System.out.println("Partial write for session " + session.getSessionId());
+                closeSession(session);
+                return;
+            }
+            totalWritten += written;
+        }
+        String side = from == session.getClientChannel() ? "client" : "backend";
+        System.out.println("Forwarded " + totalWritten + "bytes from " + side + " for session " + session.getSessionId());
+    }
+
+    private SocketChannel peerChannel(Session session, SocketChannel channel) {
+        if (channel == session.getClientChannel()) {
+            return session.getBackendChannel();
+        }
+        if (channel == session.getBackendChannel()) {
+            return session.getClientChannel();
+        }
+        return null;
     }
 
     private void closeSession(Session session) throws IOException {

@@ -128,7 +128,7 @@
 
 ---
 
-# Phase 4 — Backend Connection Logic
+# ~~Phase 4 — Backend Connection Logic~~
 
 ## Goals
 
@@ -163,7 +163,7 @@
 
 ---
 
-# Phase 5 — TCP Byte Forwarding
+# ~~Phase 5 — TCP Byte Forwarding~~
 
 ## Goals
 
