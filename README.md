@@ -1,6 +1,6 @@
 # Java Layer 4 Load Balancer (Learning Project)
 
-This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-5 cover project setup, YAML configuration, config validation, the initial selector-based event loop, session tracking, backend connection pairing, and bidirectional byte forwarding.
+This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-6 cover project setup, YAML configuration, config validation, the initial selector-based event loop, session tracking, backend connection pairing, bidirectional byte forwarding, and IP-hash selection.
 
 ## Phase 1 Status
 
@@ -34,6 +34,11 @@ This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-5 co
 - Bidirectional byte forwarding
 - Single reusable direct buffer
 - EOF handling and brutal teardown on errors
+
+## Phase 6 Status
+
+- IP-hash backend selection by client IP
+- Deterministic backend mapping per client
 
 ## Requirements
 
@@ -77,7 +82,7 @@ java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServ
 java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServer 9003 backend-3
 ```
 
-## Run Load Balancer (Phase 2-5)
+## Run Load Balancer (Phase 2-6)
 
 ```bash
 mvn -q -DskipTests exec:java \
@@ -99,4 +104,4 @@ You should see the same text echoed back. The load balancer logs should show acc
 
 ## Next Phase
 
-Phase 6 adds IP-hash backend selection.
+Phase 7 adds passive failure handling.

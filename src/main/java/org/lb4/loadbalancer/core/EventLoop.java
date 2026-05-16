@@ -81,8 +81,13 @@ public class EventLoop {
             session.setClientChannel(client);
             session.setState(SessionState.ACTIVE);
 
-            Backend backend = backendRegistry.selectBackend();
+            InetSocketAddress remote = (InetSocketAddress) client.getRemoteAddress();
+            String clientIp = remote.getAddress() != null ? remote.getAddress().getHostAddress() : remote.getHostString();
+
+            Backend backend = backendRegistry.selectBackendForClient(clientIp);
             session.setBackend(backend);
+
+            System.out.println("Selected backend " + backend + " for client " + clientIp);
 
             SelectionKey clientKey = client.register(selector, SelectionKey.OP_READ, session);
             session.setClientKey(clientKey);

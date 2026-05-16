@@ -27,4 +27,10 @@ public class BackendRegistry {
     public List<Backend> getBackends() {
         return List.copyOf(backends);
     }
+
+    public Backend selectBackendForClient(String clientIp) {
+        String key = (clientIp == null || clientIp.isBlank()) ? "unknown" : clientIp;
+        int index = Math.floorMod(key.hashCode(), backends.size());
+        return backends.get(index);
+    }
 }

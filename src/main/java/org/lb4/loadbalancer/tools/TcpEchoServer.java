@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -40,6 +41,10 @@ public class TcpEchoServer {
             while ((read = in.read(buf)) != -1) {
                 out.write(buf, 0, read);
                 out.flush();
+                String payload = new String(buf, 0, read, StandardCharsets.UTF_8)
+                        .replace("\r", "\\r")
+                        .replace("\n", "\\n");
+                System.out.println(name + " received " + read + " bytes: " + payload);
             }
         } catch (IOException e) {
             System.out.println(name + "connection error: " + e.getMessage());

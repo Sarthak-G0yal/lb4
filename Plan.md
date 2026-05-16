@@ -200,7 +200,7 @@
 
 ---
 
-# Phase 6 — Load Balancing Logic
+# ~~Phase 6 — Load Balancing Logic~~
 
 ## Goals
 
