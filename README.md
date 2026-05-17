@@ -39,6 +39,7 @@ This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-7 co
 
 - IP-hash backend selection by client IP
 - Deterministic backend mapping per client
+- Configurable algorithm: `ip_hash` or `round_robin`
 
 ## Phase 7 Status
 

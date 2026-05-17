@@ -10,7 +10,7 @@ public class LoadBalancerServer {
     public LoadBalancerServer(AppConfig config) {
         this.config = config;
         SessionManager sessionManager = new SessionManager();
-        BackendRegistry backendRegistry = new BackendRegistry(config.getBackends());
+        BackendRegistry backendRegistry = new BackendRegistry(config.getBackends(), config.getLoadBalancing().getAlgorithmEnum());
         this.eventLoop = new EventLoop(config.getServer(), sessionManager, backendRegistry);
     }
 

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.lb4.loadbalancer.config.BackendConfig;
+import org.lb4.loadbalancer.config.LoadBalancingAlgorithm;
 
 public class BackendRegistry {
 
@@ -12,10 +13,16 @@ public class BackendRegistry {
     private final List<Backend> backends = new ArrayList<>();
     private int cursor = 0;
 
-    public BackendRegistry(List<BackendConfig> configs) {
+    private final LoadBalancingAlgorithm algorithm;
+
+    public BackendRegistry(List<BackendConfig> configs, LoadBalancingAlgorithm algorithm) {
         if (configs == null || configs.isEmpty()) {
             throw new IllegalArgumentException("backends must not be empty");
         }
+        if (algorithm == null) {
+            throw new IllegalArgumentException("algorithm is required");
+        }
+        this.algorithm = algorithm;
         for (BackendConfig cfg : configs) {
             backends.add(new Backend(cfg.getId(), cfg.getHost(), cfg.getPort()));
         }
@@ -42,7 +49,7 @@ public class BackendRegistry {
         if (backend == null) {
             return;
         }
-        backend.markSuccess();;
+        backend.markSuccess();
     }
 
     private boolean isBackendHealthy(Backend backend) {
@@ -58,7 +65,24 @@ public class BackendRegistry {
         return false;
     }
 
-    public Backend selectBackendForClient(String clientIp) {
+    public Backend selectBackend(String clientIp) {
+        if (algorithm == LoadBalancingAlgorithm.ROUND_ROBIN) {
+            return selectRoundRobin();
+        }
+        return selectIpHash(clientIp);
+    }
+
+    private Backend selectRoundRobin() {
+        for (int i = 0; i < backends.size(); i++) {
+            Backend backend = backends.get(Math.floorMod(cursor++, backends.size()));
+            if (isBackendHealthy(backend)) {
+                return backend;
+            }
+        }
+        return null;
+    }
+
+    private Backend selectIpHash(String clientIp) {
         String key = (clientIp == null || clientIp.isBlank()) ? "unknown" : clientIp;
         int start = Math.floorMod(key.hashCode(), backends.size());
         for (int i = 0; i < backends.size(); i++) {
@@ -67,6 +91,6 @@ public class BackendRegistry {
                 return backend;
             }
         }
-        return backends.get(start);
+        return null;
     }
 }

@@ -87,7 +87,7 @@ public class EventLoop {
             InetSocketAddress remote = (InetSocketAddress) client.getRemoteAddress();
             String clientIp = remote.getAddress() != null ? remote.getAddress().getHostAddress() : remote.getHostString();
 
-            Backend backend = backendRegistry.selectBackendForClient(clientIp);
+            Backend backend = backendRegistry.selectBackend(clientIp);
 
             if (backend == null) {
                 System.out.println("No healthy backends for client " + clientIp);
