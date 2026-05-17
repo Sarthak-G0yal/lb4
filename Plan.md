@@ -268,7 +268,7 @@
 
 ---
 
-# Phase 8 — Logging and Observability
+# ~~Phase 8 — Logging and Observability~~
 
 ## Goals
 

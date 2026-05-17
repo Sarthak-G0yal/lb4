@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.lb4.loadbalancer.config.BackendConfig;
 import org.lb4.loadbalancer.config.LoadBalancingAlgorithm;
+import org.lb4.loadbalancer.metrics.MetricsRegistry;
 
 public class BackendRegistry {
 
@@ -14,8 +15,9 @@ public class BackendRegistry {
     private int cursor = 0;
 
     private final LoadBalancingAlgorithm algorithm;
+    private final MetricsRegistry metrics;
 
-    public BackendRegistry(List<BackendConfig> configs, LoadBalancingAlgorithm algorithm) {
+    public BackendRegistry(List<BackendConfig> configs, LoadBalancingAlgorithm algorithm, MetricsRegistry metrics) {
         if (configs == null || configs.isEmpty()) {
             throw new IllegalArgumentException("backends must not be empty");
         }
@@ -23,6 +25,7 @@ public class BackendRegistry {
             throw new IllegalArgumentException("algorithm is required");
         }
         this.algorithm = algorithm;
+        this.metrics = metrics;
         for (BackendConfig cfg : configs) {
             backends.add(new Backend(cfg.getId(), cfg.getHost(), cfg.getPort()));
         }
@@ -42,6 +45,7 @@ public class BackendRegistry {
             return;
         }
         backend.markFailure();
+        metrics.incrementBackendFailures();
         System.out.println("Marked backend unhealthy: " + backend + " reason=" + reason);
     }
 

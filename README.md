@@ -1,65 +1,61 @@
 # Java Layer 4 Load Balancer (Learning Project)
 
-This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-7 cover project setup, YAML configuration, config validation, the initial selector-based event loop, session tracking, backend connection pairing, bidirectional byte forwarding, IP-hash selection, and passive failure handling.
+This is a learning-focused Java NIO TCP Layer 4 load balancer. It accepts client TCP connections, opens a matching backend TCP connection, and forwards raw bytes in both directions. The design is intentionally simple and explicit to make non-blocking I/O mechanics, selector flow, and session lifecycle easy to study.
 
-## Phase 1 Status
-
-- Maven project and Java 21 configuration
-- YAML config mapped to POJOs (Jackson YAML)
-- Config validation with a simple loader
-- TCP echo backend for local testing
-- Docker Compose for running multiple backends
-
-## Phase 2 Status
+## Features
 
 - Single-threaded selector event loop
-- Server socket accept handling (OP_ACCEPT)
-- Client socket registration (OP_READ)
-- Connection and read event logging
+- Full proxy architecture (client and backend sockets are separate)
+- Bidirectional byte forwarding using a reusable direct buffer
+- Deterministic backend selection: `ip_hash` or `round_robin`
+- Passive backend health handling with temporary unhealthy cooldown
+- Structured event logs
+- Basic metrics counters with periodic printing
 
-## Phase 3 Status
+## Architecture Summary
 
-- Session model with client channel tracking
-- SelectionKey attachment to sessions
-- Session lifecycle tracking and cleanup
-
-## Phase 4 Status
-
-- Backend registry and selection
-- Non-blocking backend connections (OP_CONNECT)
-- Client-backend pairing per session
-
-## Phase 5 Status
-
-- Bidirectional byte forwarding
-- Single reusable direct buffer
-- EOF handling and brutal teardown on errors
-
-## Phase 6 Status
-
-- IP-hash backend selection by client IP
-- Deterministic backend mapping per client
-- Configurable algorithm: `ip_hash` or `round_robin`
-
-## Phase 7 Status
-
-- Passive backend health tracking on IO failures
-- Temporary unhealthy marking with cooldown
-- Backend selection skips unhealthy targets
+- One global `Selector` handles all `OP_ACCEPT`, `OP_CONNECT`, and `OP_READ` events
+- Each TCP client is paired with a backend in a `Session`
+- Any I/O error or EOF triggers a brutal teardown of both sides
+- Backends are selected by the configured algorithm and skipped if unhealthy
 
 ## Requirements
 
 - Java 21
 - Maven 3.9+
-- Docker + Docker Compose (optional for backends)
+- Docker + Docker Compose (optional for backend testing)
 
 ## Project Layout
 
-- src/main/java/org/lb4/loadbalancer/config: config POJOs + loader
-- src/main/java/org/lb4/loadbalancer/core: selector event loop
-- src/main/java/org/lb4/loadbalancer/tools: TCP echo server
-- src/main/resources/config.yaml: sample config
-- Dockerfile, compose.yaml: backend test setup
+- [src/main/java/org/lb4/loadbalancer/config](src/main/java/org/lb4/loadbalancer/config) configuration POJOs + loader
+- [src/main/java/org/lb4/loadbalancer/core](src/main/java/org/lb4/loadbalancer/core) core event loop and session logic
+- [src/main/java/org/lb4/loadbalancer/tools](src/main/java/org/lb4/loadbalancer/tools) test echo server
+- [src/main/resources/config.yaml](src/main/resources/config.yaml) sample config
+- [Dockerfile](Dockerfile) and [compose.yaml](compose.yaml) backend test setup
+
+## Configuration
+
+The load balancer reads a YAML config file using Jackson. The key fields are:
+
+```yaml
+server:
+  listen_ip: 0.0.0.0
+  listen_port: 8080
+
+load_balancing:
+  algorithm: ip_hash   # or round_robin
+
+backends:
+  - id: backend-1
+    host: 127.0.0.1
+    port: 9001
+  - id: backend-2
+    host: 127.0.0.1
+    port: 9002
+  - id: backend-3
+    host: 127.0.0.1
+    port: 9003
+```
 
 ## Build
 
@@ -67,21 +63,17 @@ This project is a learning-focused Java NIO Layer 4 load balancer. Phases 1-7 co
 mvn -q -DskipTests package
 ```
 
-## Validate Config Loading
+## Run
 
-```bash
-mvn -q -DskipTests exec:java \
-  -Dexec.mainClass=org.lb4.loadbalancer.Main \
-  -Dexec.args="src/main/resources/config.yaml"
-```
+### Start backend echo servers
 
-## Run Backends (Docker)
+Docker:
 
 ```bash
 docker compose -f compose.yaml up --build
 ```
 
-## Run Backends (Local Terminals)
+Local terminals:
 
 ```bash
 java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServer 9001 backend-1
@@ -89,7 +81,7 @@ java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServ
 java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServer 9003 backend-3
 ```
 
-## Run Load Balancer (Phase 2-7)
+### Start the load balancer
 
 ```bash
 mvn -q -DskipTests exec:java \
@@ -97,18 +89,30 @@ mvn -q -DskipTests exec:java \
   -Dexec.args="src/main/resources/config.yaml"
 ```
 
-## End-to-End Validation (Phase 5)
+## End-to-End Validation
 
-1. Start the backends (Docker or local terminals).
-2. Start the load balancer.
-3. Send traffic through the load balancer and verify the echo response.
+Send a message through the load balancer and verify the echo:
 
 ```bash
-printf "hello phase5\n" | nc 127.0.0.1 8080
+printf "hello lb\n" | nc 127.0.0.1 8080
 ```
 
-You should see the same text echoed back. The load balancer logs should show accept, connect, read, and forward events.
+You should see the same text returned. The console logs will show session accept, backend selection, and forward events. Every ~10 seconds, a metrics line is printed with counts for sessions, bytes, and backend failures.
 
-## Next Phase
+## Observability Output
 
-Phase 8 adds logging and observability.
+Example structured logs:
+
+```
+ts=... event=listen ip=0.0.0.0 port=8080
+ts=... event=session_accept sessionId=1 client=/127.0.0.1:12345
+ts=... event=backend_selected sessionId=1 clientIp=127.0.0.1 backend=Backend{...}
+ts=... event=forward sessionId=1 from=client bytes=12
+```
+
+Example metrics line:
+
+```
+metrics ts=... totalSessions=1 activeSessions=1 failedSessions=0 bytesForwarded=12 backendFailures=0
+```
+

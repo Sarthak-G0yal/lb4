@@ -10,6 +10,8 @@ import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 
 import org.lb4.loadbalancer.config.ServerConfig;
+import org.lb4.loadbalancer.logging.Log;
+import org.lb4.loadbalancer.metrics.MetricsRegistry;
 
 public class EventLoop {
 
@@ -22,11 +24,13 @@ public class EventLoop {
 
     private Selector selector;
     private ServerSocketChannel serverChannel;
+    private final MetricsRegistry metrics;
 
-    public EventLoop(ServerConfig serverConfig, SessionManager sessionManager, BackendRegistry backendRegistry) {
+    public EventLoop(ServerConfig serverConfig, SessionManager sessionManager, BackendRegistry backendRegistry, MetricsRegistry metrics) {
         this.serverConfig = serverConfig;
         this.sessionManager = sessionManager;
         this.backendRegistry = backendRegistry;
+        this.metrics = metrics;
     }
 
     public void run() {
@@ -37,7 +41,9 @@ public class EventLoop {
             serverChannel.bind(new InetSocketAddress(serverConfig.getListenIp(), serverConfig.getListenPort()));
             serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-            System.out.println("Listening on " + serverConfig.getListenIp() + ":" + serverConfig.getListenPort());
+            Log.info("listen",
+                    "ip", serverConfig.getListenIp(),
+                    "port", String.valueOf(serverConfig.getListenPort()));
             while (true) {
                 selector.select();
                 Iterator<SelectionKey> iter = selector.selectedKeys().iterator();
@@ -83,6 +89,8 @@ public class EventLoop {
             Session session = sessionManager.createSession();
             session.setClientChannel(client);
             session.setState(SessionState.ACTIVE);
+            metrics.incrementTotalSessions();
+            metrics.incrementActiveSessions();
 
             InetSocketAddress remote = (InetSocketAddress) client.getRemoteAddress();
             String clientIp = remote.getAddress() != null ? remote.getAddress().getHostAddress() : remote.getHostString();
@@ -90,13 +98,18 @@ public class EventLoop {
             Backend backend = backendRegistry.selectBackend(clientIp);
 
             if (backend == null) {
-                System.out.println("No healthy backends for client " + clientIp);
+                Log.info("no_backend",
+                        "clientIp", clientIp,
+                        "sessionId", String.valueOf(session.getSessionId()));
                 client.close();
                 return;
             }
             session.setBackend(backend);
 
-            System.out.println("Selected backend " + backend + " for client " + clientIp);
+            Log.info("backend_selected",
+                    "sessionId", String.valueOf(session.getSessionId()),
+                    "clientIp", clientIp,
+                    "backend", backend.toString());
 
             SelectionKey clientKey = client.register(selector, SelectionKey.OP_READ, session);
             session.setClientKey(clientKey);
@@ -112,11 +125,17 @@ public class EventLoop {
             session.setBackendKey(backendKey);
 
             sessionManager.register(session);
-            System.out.println("Accepted session " + session.getSessionId() + " from " + client.getRemoteAddress());
+            Log.info("session_accept",
+                    "sessionId", String.valueOf(session.getSessionId()),
+                    "client", String.valueOf(client.getRemoteAddress()));
             if (connected) {
-                System.out.println("Session " + session.getSessionId() + " connected to backend " + backend);
+                Log.info("backend_connected",
+                        "sessionId", String.valueOf(session.getSessionId()),
+                        "backend", backend.toString());
             } else {
-                System.out.println("Session " + session.getSessionId() + " connecting to backend " + backend);
+                Log.info("backend_connecting",
+                        "sessionId", String.valueOf(session.getSessionId()),
+                        "backend", backend.toString());
             }
         }
     }
@@ -133,11 +152,15 @@ public class EventLoop {
             if (backend.finishConnect()) {
                 key.interestOps(SelectionKey.OP_READ);
                 backendRegistry.markBackendSuccess(session.getBackend());
-                System.out.println("Backend connected for session " + session.getSessionId());
+                Log.info("backend_connected",
+                        "sessionId", String.valueOf(session.getSessionId()),
+                        "backend", session.getBackend().toString());
             }
         } catch (IOException e) {
             backendRegistry.markBackendFailure(session.getBackend(), "connect failed");
-            System.out.println("Backend connect failed for session " + session.getSessionId() + ": " + e.getMessage());
+            Log.info("backend_connect_failed",
+                    "sessionId", String.valueOf(session.getSessionId()),
+                    "error", e.getMessage());
             closeSession(session);
         }
     }
@@ -163,7 +186,9 @@ public class EventLoop {
             if (from == session.getBackendChannel()) {
                 backendRegistry.markBackendFailure(session.getBackend(), "backend EOF");
             }
-            System.out.println("Closed by peer session " + session.getSessionId());
+            Log.info("session_closed",
+                    "sessionId", String.valueOf(session.getSessionId()),
+                    "reason", "eof");
             closeSession(session);
             return;
         }
@@ -178,14 +203,19 @@ public class EventLoop {
                 if (to == session.getBackendChannel()) {
                     backendRegistry.markBackendFailure(session.getBackend(), "partial write");
                 }
-                System.out.println("Partial write for session " + session.getSessionId());
+                Log.info("partial_write",
+                        "sessionId", String.valueOf(session.getSessionId()));
                 closeSession(session);
                 return;
             }
             totalWritten += written;
         }
+        metrics.addBytesForwarded(totalWritten);
         String side = from == session.getClientChannel() ? "client" : "backend";
-        System.out.println("Forwarded " + totalWritten + "bytes from " + side + " for session " + session.getSessionId());
+        Log.info("forward",
+                "sessionId", String.valueOf(session.getSessionId()),
+                "from", side,
+                "bytes", String.valueOf(totalWritten));
     }
 
     private SocketChannel peerChannel(Session session, SocketChannel channel) {
@@ -199,7 +229,12 @@ public class EventLoop {
     }
 
     private void closeSession(Session session) throws IOException {
+        if (session.getState() == SessionState.CLOSED) {
+            return;
+        }
         session.setState(SessionState.CLOSED);
+        metrics.decrementActiveSessions();
+        metrics.incrementFailedSessions();
 
         SelectionKey clientKey = session.getClientKey();
         if (clientKey != null) {
