@@ -25,12 +25,20 @@ public class EventLoop {
     private Selector selector;
     private ServerSocketChannel serverChannel;
     private final MetricsRegistry metrics;
+    private volatile boolean running = true;
 
     public EventLoop(ServerConfig serverConfig, SessionManager sessionManager, BackendRegistry backendRegistry, MetricsRegistry metrics) {
         this.serverConfig = serverConfig;
         this.sessionManager = sessionManager;
         this.backendRegistry = backendRegistry;
         this.metrics = metrics;
+    }
+
+    public void stop() {
+        running = false;
+        if (selector != null) {
+            selector.wakeup();
+        }
     }
 
     public void run() {
@@ -44,8 +52,11 @@ public class EventLoop {
             Log.info("listen",
                     "ip", serverConfig.getListenIp(),
                     "port", String.valueOf(serverConfig.getListenPort()));
-            while (true) {
+            while (running) {
                 selector.select();
+                if (!running) {
+                    break;
+                }
                 Iterator<SelectionKey> iter = selector.selectedKeys().iterator();
                 while (iter.hasNext()) {
                     SelectionKey key = iter.next();
@@ -67,7 +78,7 @@ public class EventLoop {
                             if (key.channel() == session.getBackendChannel()) {
                                 backendRegistry.markBackendFailure(session.getBackend(), "io exception");
                             }
-                            closeSession(session);
+                            closeSession(session, true);
                         } else {
                             key.cancel();
                             key.channel().close();
@@ -77,6 +88,51 @@ public class EventLoop {
             }
         } catch (IOException e) {
             throw new IllegalStateException("Event loop failure", e);
+        } finally {
+            shutdown();
+        }
+    }
+
+    private void shutdown() {
+        Log.info("shutdown_start");
+        if (selector != null) {
+            for (SelectionKey key : selector.keys()) {
+                try {
+                    Session session = (Session) key.attachment();
+                    if (session != null) {
+                        closeSession(session, false);
+                    } else {
+                        key.cancel();
+                        if (key.channel() != null) {
+                            key.channel().close();
+                        }
+                    }
+                } catch (IOException ignored) {
+                }
+            }
+        }
+        closeServerChannel();
+        closeSelector();
+        Log.info("shutdown_done");
+    }
+
+    private void closeServerChannel() {
+        if (serverChannel == null || !serverChannel.isOpen()) {
+            return;
+        }
+        try {
+            serverChannel.close();
+        } catch (IOException ignored) {
+        }
+    }
+
+    private void closeSelector() {
+        if (selector == null || !selector.isOpen()) {
+            return;
+        }
+        try {
+            selector.close();
+        } catch (IOException ignored) {
         }
     }
 
@@ -161,7 +217,7 @@ public class EventLoop {
             Log.info("backend_connect_failed",
                     "sessionId", String.valueOf(session.getSessionId()),
                     "error", e.getMessage());
-            closeSession(session);
+            closeSession(session, true);
         }
     }
 
@@ -175,7 +231,7 @@ public class EventLoop {
         SocketChannel from = (SocketChannel) key.channel();
         SocketChannel to = peerChannel(session, from);
         if (to == null || !to.isConnected()) {
-            closeSession(session);
+            closeSession(session, true);
             return;
         }
 
@@ -189,7 +245,7 @@ public class EventLoop {
             Log.info("session_closed",
                     "sessionId", String.valueOf(session.getSessionId()),
                     "reason", "eof");
-            closeSession(session);
+            closeSession(session, true);
             return;
         }
         if (read == 0) {
@@ -205,7 +261,7 @@ public class EventLoop {
                 }
                 Log.info("partial_write",
                         "sessionId", String.valueOf(session.getSessionId()));
-                closeSession(session);
+                closeSession(session, true);
                 return;
             }
             totalWritten += written;
@@ -228,13 +284,15 @@ public class EventLoop {
         return null;
     }
 
-    private void closeSession(Session session) throws IOException {
+    private void closeSession(Session session, boolean countFailure) throws IOException {
         if (session.getState() == SessionState.CLOSED) {
             return;
         }
         session.setState(SessionState.CLOSED);
         metrics.decrementActiveSessions();
-        metrics.incrementFailedSessions();
+        if (countFailure) {
+            metrics.incrementFailedSessions();
+        }
 
         SelectionKey clientKey = session.getClientKey();
         if (clientKey != null) {

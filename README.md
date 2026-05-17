@@ -11,6 +11,7 @@ This is a learning-focused Java NIO TCP Layer 4 load balancer. It accepts client
 - Passive backend health handling with temporary unhealthy cooldown
 - Structured event logs
 - Basic metrics counters with periodic printing
+- Graceful shutdown via JVM shutdown hook
 
 ## Architecture Summary
 
@@ -18,6 +19,7 @@ This is a learning-focused Java NIO TCP Layer 4 load balancer. It accepts client
 - Each TCP client is paired with a backend in a `Session`
 - Any I/O error or EOF triggers a brutal teardown of both sides
 - Backends are selected by the configured algorithm and skipped if unhealthy
+- A shutdown hook stops the event loop and closes channels cleanly
 
 ## Requirements
 
@@ -98,6 +100,10 @@ printf "hello lb\n" | nc 127.0.0.1 8080
 ```
 
 You should see the same text returned. The console logs will show session accept, backend selection, and forward events. Every ~10 seconds, a metrics line is printed with counts for sessions, bytes, and backend failures.
+
+## Shutdown
+
+Press Ctrl+C to stop the load balancer. A shutdown hook closes all channels, stops metrics printing, and exits cleanly.
 
 ## Observability Output
 
