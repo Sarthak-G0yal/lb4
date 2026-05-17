@@ -233,7 +233,7 @@
 
 ---
 
-# Phase 7 — Passive Failure Handling
+# ~~Phase 7 — Passive Failure Handling~~
 
 ## Goals
 

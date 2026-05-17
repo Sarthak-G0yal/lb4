@@ -58,6 +58,9 @@ public class EventLoop {
                     } catch (IOException e) {
                         Session session = (Session) key.attachment();
                         if (session != null) {
+                            if (key.channel() == session.getBackendChannel()) {
+                                backendRegistry.markBackendFailure(session.getBackend(), "io exception");
+                            }
                             closeSession(session);
                         } else {
                             key.cancel();
@@ -85,6 +88,12 @@ public class EventLoop {
             String clientIp = remote.getAddress() != null ? remote.getAddress().getHostAddress() : remote.getHostString();
 
             Backend backend = backendRegistry.selectBackendForClient(clientIp);
+
+            if (backend == null) {
+                System.out.println("No healthy backends for client " + clientIp);
+                client.close();
+                return;
+            }
             session.setBackend(backend);
 
             System.out.println("Selected backend " + backend + " for client " + clientIp);
@@ -123,9 +132,11 @@ public class EventLoop {
         try {
             if (backend.finishConnect()) {
                 key.interestOps(SelectionKey.OP_READ);
+                backendRegistry.markBackendSuccess(session.getBackend());
                 System.out.println("Backend connected for session " + session.getSessionId());
             }
         } catch (IOException e) {
+            backendRegistry.markBackendFailure(session.getBackend(), "connect failed");
             System.out.println("Backend connect failed for session " + session.getSessionId() + ": " + e.getMessage());
             closeSession(session);
         }
@@ -149,6 +160,9 @@ public class EventLoop {
         int read = from.read(readBuffer);
 
         if (read == -1) {
+            if (from == session.getBackendChannel()) {
+                backendRegistry.markBackendFailure(session.getBackend(), "backend EOF");
+            }
             System.out.println("Closed by peer session " + session.getSessionId());
             closeSession(session);
             return;
@@ -161,6 +175,9 @@ public class EventLoop {
         while (readBuffer.hasRemaining()) {
             int written = to.write(readBuffer);
             if (written == 0) {
+                if (to == session.getBackendChannel()) {
+                    backendRegistry.markBackendFailure(session.getBackend(), "partial write");
+                }
                 System.out.println("Partial write for session " + session.getSessionId());
                 closeSession(session);
                 return;
