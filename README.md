@@ -12,6 +12,7 @@ This is a learning-focused Java NIO TCP Layer 4 load balancer. It accepts client
 - Structured event logs
 - Basic metrics counters with periodic printing
 - Graceful shutdown via JVM shutdown hook
+- Docker Compose environment for load balancer and backend cluster
 
 ## Architecture Summary
 
@@ -49,6 +50,21 @@ load_balancing:
 
 backends:
   - id: backend-1
+    host: backend1
+    port: 9001
+  - id: backend-2
+    host: backend2
+    port: 9002
+  - id: backend-3
+    host: backend3
+    port: 9003
+```
+
+For local (non-Docker) runs, point backends to localhost:
+
+```yaml
+backends:
+  - id: backend-1
     host: 127.0.0.1
     port: 9001
   - id: backend-2
@@ -65,17 +81,23 @@ backends:
 mvn -q -DskipTests package
 ```
 
+Docker runtime dependencies:
+
+```bash
+mvn -q -DskipTests dependency:copy-dependencies -DoutputDirectory=target/dependency
+```
+
 ## Run
 
-### Start backend echo servers
-
-Docker:
+### Docker (load balancer + backends)
 
 ```bash
 docker compose -f compose.yaml up --build
 ```
 
-Local terminals:
+### Local terminals
+
+Ensure the config uses localhost backends, then start backends and the load balancer.
 
 ```bash
 java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServer 9001 backend-1
@@ -83,7 +105,7 @@ java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServ
 java -cp target/java-lb4-1.0-SNAPSHOT.jar org.lb4.loadbalancer.tools.TcpEchoServer 9003 backend-3
 ```
 
-### Start the load balancer
+Start the load balancer:
 
 ```bash
 mvn -q -DskipTests exec:java \
